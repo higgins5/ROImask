@@ -1,0 +1,47 @@
+# nccam3 fmri stroop ROI analysis notes
+## Estelle H spring 2021
+
+# Follow-up ROI analyses for group-level analyses were done re a priori hypotheses and based on activation consistently found in previous studies
+
+### ============================================================== ###
+# For the insula ROI, we created a mask that combined the full insula, central and frontal operculum, and lateral OFC, using Harvard-Oxford coordinates 
+--> from /study/reference/public/anatomical/HarvardOxford-Cortical.xml : 
+	• Insular Cortex: index=1; x=25, y=70, z=32
+	• Frontal Opercular Cortex: index=40; x=66, y=74, z=37
+	• Central Opercular Cortex: index=41; x=19, y=61, z=40
+	• Frontal Orbital Cortex: index=32; x=25, y=77, z=29
+	
+1) first need to extract each region, based on index [note 0-based, need to add 1 to each index], from HarvardOxford 
+	• e.g., both central -and- frontal operculum: fslmaths
+	HarvardOxford-cort-maxprob-thr25-2mm.nii.gz -thr 41 -uthr 42 -bin FullOperculum-thr25 
+	
+2) To identify the place to slice OFC so medial regions are not included, find the x-dimensions of R and L insula using fslstats -w (outputs ROI dimensions xmin xsize ymin ysize zmin zsize tmin tsize) 
+	• fslstats R_InsulaROI-thr25 -w ==> 22 10 50 27 27 19 0 1 
+					...	  -thr50 -w ==> 23 7 ...
+	• fslstats L_InsulaROI-thr25 -w ==> 59 9 50 27 27 20 0 1
+					...   -thr50 -w ==> 60 7 ...
+
+3a) Use the boundary of R insula to create R OFC mask (R insula xmin + xsize = 32, so this will be the medial boundary)
+	• fslmaths OFC_ROI-thr25.nii.gz -roi 0 32 0 -1 0 -1 0 -1 R_OFC_ROIcrop-thr25
+	• fslmaths OFC_ROI-thr50.nii.gz -roi 0 30 0 -1 0 -1 0 -1 R_OFC_ROIcrop-thr50
+3b) Use boundary of L insula to create L OFC mask (L insula xmin = 59, so this will be the medial boundary starting point)
+	• fslmaths OFC_ROI-thr25.nii.gz -roi 59 91 0 -1 0 -1 0 -1 L_OFC_ROIcrop-thr25
+	• fslmaths OFC_ROI-thr50.nii.gz -roi 60 91 0 -1 0 -1 0 -1 L_OFC_ROIcrop-thr50
+
+## NOTES ## 
+using fslmaths -roi (xmin xsize ymin ysize zmin zsize tmin tsize): 
+	• with xmin=0, starts at far R side; with size = 45, extends to far L
+	• any dimension's <min> <size> = 0 -1 uses full original dimension size
+	• since we only want to change the x-dimension, every other dimension is 0 -1)
+	
+4) Combine all insula/operculum/cropped OFC:
+	• fslmaths L_OFC_ROIcrop-thr25.nii.gz -add R_OFC_ROIcrop-thr25.nii.gz -add InsulaROI-thr25.nii.gz -add FullOperculum-thr25.nii.gz Ins_Operc_OFC_mask-thr25.nii.gz
+
+# Probability threshold of 25% looks better than 50%, which has a lot of gaps
+
+5) Transform to MNI space (Harvard-Oxford map is in scanner space) to use in Feat
+	# -usesqform flag aligns the images based on standard space coordinates
+	# reference: https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FLIRT/FAQ#How_do_I_transform_a_mask_with_FLIRT_from_one_space_to_another.3F
+	• flirt -in Ins_Operc_OFC_mask-thr25.nii.gz -ref ../../../../../../../../apps/x86_64_sci7/fsl-latest/data/standard/MNI152_T1_2mm_brain.nii.gz -applyxfm -usesqform -out Ins_Operc_OFC_mask-thr25MNI
+
+### ============================================================== ###
